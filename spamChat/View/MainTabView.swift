@@ -13,20 +13,40 @@ struct CustomTabView: View {
     @State private var tabBarHeight: CGFloat = 60
     @State private var keyboardHeight: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var webSocketService = WebSocketService.shared
     
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
                 SpamChatListView()
                     .tag(0)
-                
-                BlockListView()
+
+                SettingView()
                     .tag(1)
             }
             .tabViewStyle(DefaultTabViewStyle())
             .onChange(of: selectedTab) { oldValue, newValue in
                 // Dismiss keyboard when switching tabs
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                // Handle app lifecycle for WebSocket
+                switch newPhase {
+                case .active:
+                    print("🔍 App became active")
+                    // Reconnect WebSocket if disconnected
+                    if !webSocketService.isConnected {
+                        print("🔄 Reconnecting WebSocket...")
+                    }
+                case .background:
+                    print("📱 App went to background - keeping WebSocket connected")
+                    // Keep connection alive in background for notifications
+                case .inactive:
+                    print("⏸️ App became inactive")
+                @unknown default:
+                    break
+                }
             }
             .onAppear {
                 setupKeyboardObservers()
@@ -51,14 +71,15 @@ struct CustomTabView: View {
                     .frame(maxWidth: .infinity)
                     
                     TabButtonView(
-                        systemName: "hand.raised.fill",
-                        title: "Blocked",
+                        systemName: "gearshape.fill",
+                        title: "Settings",
                         isSelected: selectedTab == 1,
                         size: regularTabSize
                     ) {
                         selectedTab = 1
                     }
                     .frame(maxWidth: .infinity)
+                    
                 }
                 .padding(.top, 8)
                 .padding(.bottom, UIApplication.safeAreaBottom > 0 ? 8 : 12)
