@@ -23,6 +23,9 @@ struct spamChatApp: App {
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     @State private var fcmTokenDevice: String = ""
     
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
     
     func application(
         _ application: UIApplication,
@@ -60,6 +63,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         if let savedToken = UserDefaults.standard.string(forKey: "FCMToken") {
             fcmTokenDevice = savedToken
             print("📱 Loaded saved FCM token from UserDefaults: \(savedToken.prefix(20))...")
+            
+            // ✅ Set FCM token for WebSocket (professional chat app pattern)
+            WebSocketService.shared.setFCMToken(savedToken)
+            print("✅ FCM token set for WebSocket connection")
         } else {
             print("⚠️ No saved FCM token found")
         }
@@ -67,7 +74,59 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Initialize PusherManager
         //terminated not working with pusher
         //        PusherManager.shared.connect()
+        
+        // Reset badge when app becomes active
+        setupAppLifecycleObservers()
+        
         return true
+    }
+    
+    private func setupAppLifecycleObservers() {
+        // Reset badge when app enters foreground
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("📱 App entering foreground - resetting badge and reconnecting WebSocket")
+            self?.resetBadgeImmediately()
+            
+            // ✅ Reconnect WebSocket when app comes to foreground
+            // WebSocket will use the FCM token that was already set
+            if let token = self?.fcmTokenDevice, !token.isEmpty {
+                WebSocketService.shared.setFCMToken(token)
+            }
+        }
+        
+        // Reset badge when app becomes active
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("📱 App became active - resetting badge")
+            self?.resetBadgeImmediately()
+        }
+        
+        // Disconnect WebSocket when app goes to background
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📱 App entered background - WebSocket will be disconnected by iOS")
+            // iOS automatically closes WebSocket connections in background
+        }
+    }
+    
+    private func resetBadgeImmediately() {
+        UNUserNotificationCenter.current().setBadgeCount(0) { error in
+            if let error = error {
+                print("❌ Failed to reset badge: \(error.localizedDescription)")
+            } else {
+                print("✅ Badge reset to 0")
+            }
+        }
     }
     
     func application(
@@ -85,6 +144,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             if let token = token {
                 print("✅ FCM token received: \(token.prefix(20))...")
                 self?.fcmTokenDevice = token
+                
+                // ✅ Set FCM token for WebSocket (professional chat app pattern)
+                WebSocketService.shared.setFCMToken(token)
+                print("✅ FCM token set for WebSocket connection")
+                
                 self?.sendTokenToServer(token)
             } else {
                 print("❌ Failed to get FCM token")
@@ -133,6 +197,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                 print("✅ FCM token fetched successfully!")
                 print("   Token: \(token.prefix(30))...")
                 UserDefaults.standard.set(token, forKey: "FCMToken")
+                
+                // ✅ Set FCM token for WebSocket (professional chat app pattern)
+                WebSocketService.shared.setFCMToken(token)
+                print("✅ FCM token set for WebSocket connection")
+                
                 completion(token)
             } else {
                 print("⚠️ FCM token is nil (no error but no token)")
@@ -144,16 +213,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        print("Notification received with userInfo: \(userInfo)")
+        print("📬 Notification received with userInfo: \(userInfo)")
         
-        if let aps = userInfo["aps"] as? [String: Any],
-           let badge = aps["badge"] as? Int {
-            UNUserNotificationCenter.current().setBadgeCount(badge) { error in
-                if let error = error {
-                    print("Failed to update badge count: \(error.localizedDescription)")
-                }
-            }
-        }
+        // Always reset badge to 0 (ignore badge from notification)
+        resetBadgeImmediately()
         
         completionHandler(.newData)
     }
@@ -173,6 +236,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Save token
         fcmTokenDevice = fcmToken
         UserDefaults.standard.set(fcmToken, forKey: "FCMToken")
+        
+        // ✅ Set FCM token for WebSocket (professional chat app pattern)
+        WebSocketService.shared.setFCMToken(fcmToken)
+        print("✅ FCM token set for WebSocket connection")
         
         // Send to backend
         sendTokenToServer(fcmToken)
@@ -207,18 +274,24 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        print("Foreground notification: \(notification.request.content.userInfo)")
-        // Extract badge number from notification payload
-        if let badge = notification.request.content.badge as? Int {
-            UNUserNotificationCenter.current().setBadgeCount(badge) { error in
-                if let error = error {
-                    print("Failed to update badge count: \(error.localizedDescription)")
-                }
-            }
-        }
+        print("📬 Foreground notification: \(notification.request.content.userInfo)")
+        
+        // Always reset badge to 0 (ignore badge from notification)
+        resetBadgeImmediately()
         
         // Show the notification as a banner even when the app is in the foreground
-        completionHandler([.banner, .sound, .badge])
+        completionHandler([.banner, .sound])  // Removed .badge to prevent badge updates
+    }
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        print("📱 User tapped notification: \(response.notification.request.content.userInfo)")
+        
+        // Reset badge when user opens app from notification
+        resetBadgeImmediately()
+        
+        completionHandler()
     }
     
     

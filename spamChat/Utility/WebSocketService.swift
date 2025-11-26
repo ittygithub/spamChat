@@ -127,7 +127,15 @@ class WebSocketService: ObservableObject {
         self.session = URLSession(configuration: config)
     }
     
+    private var fcmToken: String?
+    
     // MARK: - Connection Management
+    
+    /// Set FCM token for WebSocket connection (must be called before connect)
+    func setFCMToken(_ token: String) {
+        self.fcmToken = token
+        print("✅ FCM token set for WebSocket: \(token.prefix(30))...")
+    }
     
     func connect(agencyId: String = "1", userId: String? = nil) {
         print("🔍 DEBUG: connect() method called with agencyId: \(agencyId), userId: \(userId ?? "nil")")
@@ -149,14 +157,24 @@ class WebSocketService: ObservableObject {
         
         print("🔍 DEBUG: baseURL after transformation = \(baseURL)")
         
-        let clientId = "ios_\(UUID().uuidString.prefix(8))"
+        // ✅ Use FCM token as clientId (like WhatsApp, Telegram, Messenger)
+        let clientId: String
+        if let fcmToken = fcmToken, !fcmToken.isEmpty {
+            clientId = fcmToken
+            print("✅ Using FCM token as clientId: \(fcmToken.prefix(30))...")
+        } else {
+            // Fallback to UUID if FCM token not available yet
+            clientId = "ios_\(UUID().uuidString.prefix(8))"
+            print("⚠️ FCM token not available, using fallback clientId: \(clientId)")
+        }
+        
         var urlString = "\(baseURL)/ws?clientId=\(clientId)&agencyId=\(agencyId)"
         
         if let userId = userId {
             urlString += "&userId=\(userId)"
         }
         
-        print("🔍 DEBUG: Final WebSocket URL = \(urlString)")
+        print("🔍 DEBUG: Final WebSocket URL = \(baseURL)/ws?clientId=\(clientId.prefix(30))...&agencyId=\(agencyId)")
         
         guard let url = URL(string: urlString) else {
             print("❌ Invalid WebSocket URL: \(urlString)")
@@ -170,6 +188,18 @@ class WebSocketService: ObservableObject {
         webSocketTask = session.webSocketTask(with: url)
         print("🔍 DEBUG: WebSocketTask created, calling resume()...")
         webSocketTask?.resume()
+        
+        // Add connection state monitoring
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if self.webSocketTask?.state == .running {
+                print("✅ WebSocket connection established successfully")
+            } else {
+                print("❌ WebSocket connection failed or timed out")
+                print("   State: \(self.webSocketTask?.state.rawValue ?? -1)")
+                self.lastError = "Connection timeout"
+                self.isConnected = false
+            }
+        }
         
         DispatchQueue.main.async {
             self.isConnected = true

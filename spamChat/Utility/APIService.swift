@@ -170,6 +170,10 @@ class APIService {
         method: String,
         body: T
     ) async throws -> R {
+        // For local development, try direct API calls first
+        if !Env.shared.isProduction {
+            return try await makeDirectRequest(endpoint: endpoint, method: method, body: body)
+        }
         // Generate timestamp and token for authentication
         let time = "\(Int(Date().timeIntervalSince1970))"
         let token = md5("\(apiKey)\(time)")
@@ -274,6 +278,119 @@ class APIService {
         
         let decoder = JSONDecoder()
         let result = try decoder.decode(R.self, from: decryptedData)
+        
+        return result
+    }
+    
+    // MARK: - Direct Request for Local Development
+    
+    func makeDirectRequest<T: Codable, R: Codable>(
+        endpoint: String,
+        method: String,
+        body: T
+    ) async throws -> R {
+        print("🔧 Using direct API request for local development")
+        
+        // Generate timestamp and token for authentication
+        let time = "\(Int(Date().timeIntervalSince1970))"
+        let token = md5("\(apiKey)\(time)")
+        
+        // Encode body to dictionary
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(body)
+        guard var bodyDict = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] else {
+            throw APIError.encryptionError
+        }
+        
+        var request: URLRequest
+        
+        if method == "GET" {
+            // For GET requests, send parameters as query string
+            guard var urlComponents = URLComponents(string: endpoint) else {
+                throw APIError.invalidURL
+            }
+            
+            var queryItems: [URLQueryItem] = [
+                URLQueryItem(name: "time", value: time),
+                URLQueryItem(name: "token", value: token)
+            ]
+            
+            // Add other parameters from body
+            for (key, value) in bodyDict {
+                if let stringValue = value as? String {
+                    queryItems.append(URLQueryItem(name: key, value: stringValue))
+                } else if let intValue = value as? Int {
+                    queryItems.append(URLQueryItem(name: key, value: "\(intValue)"))
+                } else if let doubleValue = value as? Double {
+                    queryItems.append(URLQueryItem(name: key, value: "\(doubleValue)"))
+                } else {
+                    // Convert complex types to JSON string
+                    if let jsonData = try? JSONSerialization.data(withJSONObject: value, options: []),
+                       let jsonString = String(data: jsonData, encoding: .utf8) {
+                        queryItems.append(URLQueryItem(name: key, value: jsonString))
+                    }
+                }
+            }
+            urlComponents.queryItems = queryItems
+            
+            guard let url = urlComponents.url else {
+                throw APIError.invalidURL
+            }
+            
+            request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            
+            print("📤 Direct GET Request to: \(url.absoluteString)")
+        } else {
+            // For POST/PUT/DELETE, send parameters in body with time and token
+            guard let url = URL(string: endpoint) else {
+                throw APIError.invalidURL
+            }
+            
+            // Add time and token to body for POST requests
+            bodyDict["time"] = time
+            bodyDict["token"] = token
+            
+            request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            // Convert to JSON data
+            let finalJsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: [])
+            request.httpBody = finalJsonData
+            
+            print("📤 Direct \(method) Request to: \(endpoint)")
+            if let jsonString = String(data: finalJsonData, encoding: .utf8) {
+                print("📤 Request body: \(jsonString)")
+            }
+        }
+        
+        // Make request
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.noData
+        }
+        
+        print("📥 Direct Response status: \(httpResponse.statusCode)")
+        
+        // For local development, expect direct JSON response (not encrypted)
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("📥 Direct response: \(jsonString)")
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            // Try to parse error message from response
+            if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorMessage = errorDict["error"] as? String {
+                throw APIError.serverError(errorMessage)
+            }
+            throw APIError.serverError("Server returned status code: \(httpResponse.statusCode)")
+        }
+        
+        // Decode direct JSON response
+        let decoder = JSONDecoder()
+        let result = try decoder.decode(R.self, from: data)
         
         return result
     }
