@@ -14,3 +14,8 @@ struct PaginationLink: Codable {
     let label: String
     let active: Bool
 }
+
+struct StatusBasic: Codable {
+    let code: Int
+    let message: String
+}

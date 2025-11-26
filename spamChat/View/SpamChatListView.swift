@@ -698,6 +698,7 @@ struct SpamChatGroupView: View {
         if let date = date {
             let formatter = DateFormatter()
             formatter.dateFormat = "dd/MM/yyyy HH:mm"
+            // Display in user's local timezone
             return formatter.string(from: date)
         }
         

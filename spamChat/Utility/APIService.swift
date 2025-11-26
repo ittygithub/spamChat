@@ -147,6 +147,22 @@ class APIService {
         return response
     }
     
+    // MARK: - Save FCM Token
+    
+    func saveFCMToken(fcmToken: String) async throws -> SaveTokenResponse {
+        let endpoint = "\(baseURL)/save-token"
+        
+        let requestBody = SaveTokenRequest(fcmToken: fcmToken)
+        
+        let response: SaveTokenResponse = try await makeRequest(
+            endpoint: endpoint,
+            method: "POST",
+            body: requestBody
+        )
+        
+        return response
+    }
+    
     // MARK: - Generic Request with Encrypted Response
     
     private func makeRequest<T: Codable, R: Codable>(

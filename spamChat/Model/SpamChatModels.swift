@@ -129,6 +129,21 @@ struct LockAccountRequest: Codable {
     let accountStatus: String
 }
 
+// MARK: - Save FCM Token Models
+
+struct SaveTokenRequest: Codable {
+    let fcmToken: String
+    
+    enum CodingKeys: String, CodingKey {
+        case fcmToken = "fcm_token"
+    }
+}
+
+struct SaveTokenResponse: Codable {
+    let success: Bool
+    let message: String
+}
+
 // MARK: - API Response Models
 
 struct APIResponse: Codable {
