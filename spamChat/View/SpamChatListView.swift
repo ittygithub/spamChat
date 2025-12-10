@@ -58,7 +58,7 @@ struct SpamChatListView: View {
                             .foregroundColor(.red)
                         Text(error)
                             .font(.subheadline)
-                            .foregroundColor(.gray.opacity(0.7))
+                            .foregroundColor(.red)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                         Button("Retry") {
@@ -142,8 +142,8 @@ struct SpamChatListView: View {
                             .refreshable {
                                 await refreshData()
                             }
-                            .onChange(of: shouldScrollToBottom) { newValue in
-                                if newValue {
+                            .onChange(of: shouldScrollToBottom) {
+                                if shouldScrollToBottom {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                                         withAnimation(.easeOut(duration: 0.3)) {
                                             scrollProxy.scrollTo("bottom", anchor: .bottom)
@@ -473,10 +473,8 @@ struct SpamChatListView: View {
         webSocketService.onStatusUpdate = { [self] update in
             // Find and update the chat in the list
             if let index = spamChats.firstIndex(where: { $0.userId == update.userId }) {
-                var updatedChat = spamChats[index]
-                
                 // Update the status fields
-                var mutableChat = updatedChat
+                var mutableChat = spamChats[index]
                 mutableChat.chatStatus = update.chatStatus
                 mutableChat.accountStatus = update.accountStatus
                 if let totalMessages = update.totalMessages {
@@ -748,10 +746,15 @@ struct LockChatOptionsSheet: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = "Success"
+    @State private var isError = false
     
     // Check if this is an unlock action (current chat status is banned)
     private var isUnlockAction: Bool {
         chat.chatStatus.uppercased().contains("BANNED") || chat.chatStatus.uppercased().contains("LOCKED")
+    }
+    
+    private var availableStatuses: [LockChatStatus] {
+        isUnlockAction ? LockChatStatus.allCases : LockChatStatus.allCases.filter { $0 != .active }
     }
     
     init(chat: SpamChatItem, onDismiss: @escaping (String?) -> Void) {
@@ -768,122 +771,199 @@ struct LockChatOptionsSheet: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button("Cancel") {
-                    onDismiss(nil)
-                }
-                .disabled(isSubmitting)
-                
-                Spacer()
-                
-                Text(isUnlockAction ? "Unlock Chat" : "Lock Chat")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Button("Cancel") {
-                    onDismiss(nil)
-                }
-                .disabled(isSubmitting)
-                .opacity(0)
-            }
-            .padding()
-            .background(Color(UIColor.systemBackground))
-            
+            headerView
             Divider()
-            
-            ScrollView {
-                VStack(spacing: 20) {
-                    // User Info
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("User: \(chat.username)")
-                            .font(.headline)
-                        Text("User ID: \(chat.userId)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
-                    
-                    // Status Options
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(isUnlockAction ? "Change Chat Status:" : "Select Lock Chat Status:")
-                            .font(.headline)
-                            .padding(.bottom, 4)
-                        
-                        // If unlocking (from banned), show all options; if locking (from active), exclude ACTIVE
-                        ForEach(isUnlockAction ? LockChatStatus.allCases : LockChatStatus.allCases.filter { $0 != .active }, id: \.self) { status in
-                            Button(action: {
-                                selectedStatus = status
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: selectedStatus == status ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(selectedStatus == status ? .blue : .gray)
-                                        .font(.title3)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(status.displayName)
-                                            .font(.body)
-                                            .foregroundColor(.primary)
-                                        Text(status.rawValue)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(selectedStatus == status ? Color.blue.opacity(0.1) : Color(UIColor.secondarySystemBackground))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(selectedStatus == status ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    
-                    // Submit Button
-                    Button(action: submitLockChat) {
-                        HStack {
-                            if isSubmitting {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            }
-                            Text(isSubmitting ? "Submitting..." : "Submit")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isSubmitting ? Color.gray : (selectedStatus == .active ? Color.green : Color.orange))
-                        .cornerRadius(10)
-                    }
-                    .disabled(isSubmitting)
-                    .padding(.top, 10)
-                }
-                .padding()
-                .padding(.bottom, 20)
-            }
+            contentView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(UIColor.systemBackground))
-        .alert(alertTitle, isPresented: $showAlert) {
-            Button("OK") {
-                if alertTitle == "Success" {
-                    onDismiss(selectedStatus.rawValue)
-                } else {
-                    onDismiss(nil)
-                }
+        .overlay(alertOverlay)
+    }
+    
+    private var headerView: some View {
+        HStack {
+            Button("Cancel") {
+                onDismiss(nil)
             }
-        } message: {
-            Text(alertMessage)
+            .disabled(isSubmitting)
+            
+            Spacer()
+            
+            Text(isUnlockAction ? "Unlock Chat" : "Lock Chat")
+                .font(.headline)
+            
+            Spacer()
+            
+            Button("Cancel") {
+                onDismiss(nil)
+            }
+            .disabled(isSubmitting)
+            .opacity(0)
+        }
+        .padding()
+        .background(Color(UIColor.systemBackground))
+    }
+    
+    private var contentView: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                userInfoView
+                statusOptionsView
+                submitButton
+            }
+            .padding()
+            .padding(.bottom, 20)
+        }
+    }
+    
+    private var userInfoView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("User: \(chat.username)")
+                .font(.headline)
+            Text("User ID: \(chat.userId)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    private var statusOptionsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(isUnlockAction ? "Change Chat Status:" : "Select Lock Chat Status:")
+                .font(.headline)
+                .padding(.bottom, 4)
+            
+            ForEach(availableStatuses, id: \.self) { status in
+                statusButton(for: status)
+            }
+        }
+    }
+    
+    private func statusButton(for status: LockChatStatus) -> some View {
+        Button(action: {
+            selectedStatus = status
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: selectedStatus == status ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(selectedStatus == status ? .blue : .gray)
+                    .font(.title3)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(status.displayName)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                    Text(status.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedStatus == status ? Color.blue.opacity(0.1) : Color(UIColor.secondarySystemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(selectedStatus == status ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var submitButton: some View {
+        Button(action: submitLockChat) {
+            HStack {
+                if isSubmitting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+                Text(isSubmitting ? "Submitting..." : "Submit")
+            }
+            .font(.headline)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(isSubmitting ? Color.gray : (selectedStatus == .active ? Color.green : Color.orange))
+            .cornerRadius(10)
+        }
+        .disabled(isSubmitting)
+        .padding(.top, 10)
+    }
+    
+    @ViewBuilder
+    private var alertOverlay: some View {
+        if showAlert {
+            ZStack {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        // Dismiss on background tap for errors only
+                        if isError {
+                            showAlert = false
+                            onDismiss(nil)
+                        }
+                    }
+                
+                VStack(spacing: 0) {
+                    // Icon at top
+                    ZStack {
+                        Circle()
+                            .fill(isError ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(isError ? .red : .green)
+                    }
+                    .padding(.top, 30)
+                    .padding(.bottom, 20)
+                    
+                    // Title
+                    Text(alertTitle)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.primary)
+                        .padding(.bottom, 8)
+                    
+                    // Message
+                    Text(alertMessage)
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 30)
+                        .padding(.bottom, 30)
+                    
+                    // Divider
+                    Divider()
+                    
+                    // OK Button
+                    Button(action: {
+                        showAlert = false
+                        if !isError {
+                            onDismiss(selectedStatus.rawValue)
+                        } else {
+                            onDismiss(nil)
+                        }
+                    }) {
+                        Text("OK")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(isError ? .red : .green)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                    }
+                }
+                .frame(width: 320)
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(20)
+                .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
+                .scaleEffect(showAlert ? 1 : 0.8)
+                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showAlert)
+            }
         }
     }
     
@@ -897,6 +977,7 @@ struct LockChatOptionsSheet: View {
             // Extract number from format like "test_user_203"
             let components = chat.userId.components(separatedBy: "_")
             guard let lastComponent = components.last, let extractedId = Int(lastComponent) else {
+                isError = true
                 alertTitle = "Error"
                 alertMessage = "Invalid user ID format: \(chat.userId)"
                 showAlert = true
@@ -904,6 +985,7 @@ struct LockChatOptionsSheet: View {
             }
             userIdNumber = extractedId
         } else {
+            isError = true
             alertTitle = "Error"
             alertMessage = "Invalid user ID format: \(chat.userId)"
             showAlert = true
@@ -923,6 +1005,7 @@ struct LockChatOptionsSheet: View {
                 
                 await MainActor.run {
                     isSubmitting = false
+                    isError = false
                     alertTitle = "Success"
                     alertMessage = "Chat status updated to \(selectedStatus.displayName)"
                     showAlert = true
@@ -930,6 +1013,7 @@ struct LockChatOptionsSheet: View {
             } catch let error as APIError {
                 await MainActor.run {
                     isSubmitting = false
+                    isError = true
                     alertTitle = "Error"
                     alertMessage = error.localizedDescription
                     showAlert = true
@@ -937,6 +1021,7 @@ struct LockChatOptionsSheet: View {
             } catch {
                 await MainActor.run {
                     isSubmitting = false
+                    isError = true
                     alertTitle = "Error"
                     alertMessage = error.localizedDescription
                     showAlert = true
@@ -957,10 +1042,15 @@ struct LockAccountOptionsSheet: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = "Success"
+    @State private var isError = false
     
     // Check if this is an unlock action (current account status is banned)
     private var isUnlockAction: Bool {
         chat.accountStatus.uppercased().contains("BANNED") || chat.accountStatus.uppercased().contains("LOCKED")
+    }
+    
+    private var availableStatuses: [AccountStatus] {
+        isUnlockAction ? AccountStatus.allCases : AccountStatus.allCases.filter { $0 != .active }
     }
     
     init(chat: SpamChatItem, onDismiss: @escaping (String?) -> Void) {
@@ -977,122 +1067,199 @@ struct LockAccountOptionsSheet: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button("Cancel") {
-                    onDismiss(nil)
-                }
-                .disabled(isSubmitting)
-                
-                Spacer()
-                
-                Text(isUnlockAction ? "Unlock Account" : "Lock Account")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Button("Cancel") {
-                    onDismiss(nil)
-                }
-                .disabled(isSubmitting)
-                .opacity(0)
-            }
-            .padding()
-            .background(Color(UIColor.systemBackground))
-            
+            headerView
             Divider()
-            
-            ScrollView {
-                VStack(spacing: 20) {
-                    // User Info
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("User: \(chat.username)")
-                            .font(.headline)
-                        Text("User ID: \(chat.userId)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
-                    
-                    // Status Options
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(isUnlockAction ? "Change Account Status:" : "Select Account Status:")
-                            .font(.headline)
-                            .padding(.bottom, 4)
-                        
-                        // If unlocking (from banned), show all options; if locking (from active), exclude ACTIVE
-                        ForEach(isUnlockAction ? AccountStatus.allCases : AccountStatus.allCases.filter { $0 != .active }, id: \.self) { status in
-                            Button(action: {
-                                selectedStatus = status
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: selectedStatus == status ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(selectedStatus == status ? .blue : .gray)
-                                        .font(.title3)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(status.displayName)
-                                            .font(.body)
-                                            .foregroundColor(.primary)
-                                        Text(status.rawValue)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(selectedStatus == status ? Color.blue.opacity(0.1) : Color(UIColor.secondarySystemBackground))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(selectedStatus == status ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    
-                    // Submit Button
-                    Button(action: submitLockAccount) {
-                        HStack {
-                            if isSubmitting {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            }
-                            Text(isSubmitting ? "Submitting..." : "Submit")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isSubmitting ? Color.gray : (selectedStatus == .active ? Color.green : Color.red))
-                        .cornerRadius(10)
-                    }
-                    .disabled(isSubmitting)
-                    .padding(.top, 10)
-                }
-                .padding()
-                .padding(.bottom, 20)
-            }
+            contentView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(UIColor.systemBackground))
-        .alert(alertTitle, isPresented: $showAlert) {
-            Button("OK") {
-                if alertTitle == "Success" {
-                    onDismiss(selectedStatus.rawValue)
-                } else {
-                    onDismiss(nil)
-                }
+        .overlay(alertOverlay)
+    }
+    
+    private var headerView: some View {
+        HStack {
+            Button("Cancel") {
+                onDismiss(nil)
             }
-        } message: {
-            Text(alertMessage)
+            .disabled(isSubmitting)
+            
+            Spacer()
+            
+            Text(isUnlockAction ? "Unlock Account" : "Lock Account")
+                .font(.headline)
+            
+            Spacer()
+            
+            Button("Cancel") {
+                onDismiss(nil)
+            }
+            .disabled(isSubmitting)
+            .opacity(0)
+        }
+        .padding()
+        .background(Color(UIColor.systemBackground))
+    }
+    
+    private var contentView: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                userInfoView
+                statusOptionsView
+                submitButton
+            }
+            .padding()
+            .padding(.bottom, 20)
+        }
+    }
+    
+    private var userInfoView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("User: \(chat.username)")
+                .font(.headline)
+            Text("User ID: \(chat.userId)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    private var statusOptionsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(isUnlockAction ? "Change Account Status:" : "Select Account Status:")
+                .font(.headline)
+                .padding(.bottom, 4)
+            
+            ForEach(availableStatuses, id: \.self) { status in
+                statusButton(for: status)
+            }
+        }
+    }
+    
+    private func statusButton(for status: AccountStatus) -> some View {
+        Button(action: {
+            selectedStatus = status
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: selectedStatus == status ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(selectedStatus == status ? .blue : .gray)
+                    .font(.title3)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(status.displayName)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                    Text(status.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedStatus == status ? Color.blue.opacity(0.1) : Color(UIColor.secondarySystemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(selectedStatus == status ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var submitButton: some View {
+        Button(action: submitLockAccount) {
+            HStack {
+                if isSubmitting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+                Text(isSubmitting ? "Submitting..." : "Submit")
+            }
+            .font(.headline)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(isSubmitting ? Color.gray : (selectedStatus == .active ? Color.green : Color.red))
+            .cornerRadius(10)
+        }
+        .disabled(isSubmitting)
+        .padding(.top, 10)
+    }
+    
+    @ViewBuilder
+    private var alertOverlay: some View {
+        if showAlert {
+            ZStack {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        // Dismiss on background tap for errors only
+                        if isError {
+                            showAlert = false
+                            onDismiss(nil)
+                        }
+                    }
+                
+                VStack(spacing: 0) {
+                    // Icon at top
+                    ZStack {
+                        Circle()
+                            .fill(isError ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(isError ? .red : .green)
+                    }
+                    .padding(.top, 30)
+                    .padding(.bottom, 20)
+                    
+                    // Title
+                    Text(alertTitle)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.primary)
+                        .padding(.bottom, 8)
+                    
+                    // Message
+                    Text(alertMessage)
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 30)
+                        .padding(.bottom, 30)
+                    
+                    // Divider
+                    Divider()
+                    
+                    // OK Button
+                    Button(action: {
+                        showAlert = false
+                        if !isError {
+                            onDismiss(selectedStatus.rawValue)
+                        } else {
+                            onDismiss(nil)
+                        }
+                    }) {
+                        Text("OK")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(isError ? .red : .green)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                    }
+                }
+                .frame(width: 320)
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(20)
+                .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
+                .scaleEffect(showAlert ? 1 : 0.8)
+                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showAlert)
+            }
         }
     }
     
@@ -1106,6 +1273,7 @@ struct LockAccountOptionsSheet: View {
             // Extract number from format like "test_user_203"
             let components = chat.userId.components(separatedBy: "_")
             guard let lastComponent = components.last, let extractedId = Int(lastComponent) else {
+                isError = true
                 alertTitle = "Error"
                 alertMessage = "Invalid user ID format: \(chat.userId)"
                 showAlert = true
@@ -1113,6 +1281,7 @@ struct LockAccountOptionsSheet: View {
             }
             userIdNumber = extractedId
         } else {
+            isError = true
             alertTitle = "Error"
             alertMessage = "Invalid user ID format: \(chat.userId)"
             showAlert = true
@@ -1132,6 +1301,7 @@ struct LockAccountOptionsSheet: View {
                 
                 await MainActor.run {
                     isSubmitting = false
+                    isError = false
                     alertTitle = "Success"
                     alertMessage = "Account status updated to \(selectedStatus.displayName)"
                     showAlert = true
@@ -1139,6 +1309,7 @@ struct LockAccountOptionsSheet: View {
             } catch let error as APIError {
                 await MainActor.run {
                     isSubmitting = false
+                    isError = true
                     alertTitle = "Error"
                     alertMessage = error.localizedDescription
                     showAlert = true
@@ -1146,6 +1317,7 @@ struct LockAccountOptionsSheet: View {
             } catch {
                 await MainActor.run {
                     isSubmitting = false
+                    isError = true
                     alertTitle = "Error"
                     alertMessage = error.localizedDescription
                     showAlert = true

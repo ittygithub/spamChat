@@ -162,6 +162,10 @@ struct TabButtonView: View {
 // Safe area helper to handle bottom insets correctly
 extension UIApplication {
     static var safeAreaBottom: CGFloat {
-        return UIApplication.shared.windows.first?.safeAreaInsets.bottom ?? 0
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            return 0
+        }
+        return window.safeAreaInsets.bottom
     }
 }
