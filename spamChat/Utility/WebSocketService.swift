@@ -84,6 +84,11 @@ struct SpamChatNotification: Codable {
     let chatStatus: String
     let accountStatus: String
     let createdAt: String
+    
+    // New spam detection fields (from ML model)
+    let spamType: String?     // Type of spam detected
+    let spamScore: Double?    // ML spam confidence score (0.0-1.0)
+    let gameId: String?       // Game identifier
 }
 
 struct UserStatusUpdate: Codable {

@@ -55,9 +55,29 @@ struct SpamChatItem: Codable, Identifiable {
     var timestamp: String?
     var totalMessages: Int?  // Total spam messages count for this user
     
+    // Spam detection fields (from ML model)
+    var spamType: String?     // Type of spam detected (e.g., "dummy_spam_type")
+    var spamScore: Double?    // ML spam confidence score (0.0-1.0)
+    var gameId: String?       // Game identifier where chat originated
+    
     // Computed property to satisfy Identifiable with String id
     var stringId: String {
         return "\(id)"
+    }
+    
+    // Computed property for formatted spam score percentage
+    var spamScorePercentage: String {
+        guard let score = spamScore else { return "N/A" }
+        return String(format: "%.1f%%", score * 100)
+    }
+    
+    // Computed property for spam severity color
+    var spamSeverityColor: String {
+        guard let score = spamScore else { return "gray" }
+        if score >= 0.9 { return "red" }
+        if score >= 0.7 { return "orange" }
+        if score >= 0.5 { return "yellow" }
+        return "green"
     }
 }
 

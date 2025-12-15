@@ -514,7 +514,10 @@ struct SpamChatListView: View {
             platform: notification.platform,
             displayName: notification.username,
             timestamp: notification.createdAt,
-            totalMessages: nil  // Not provided in real-time notifications
+            totalMessages: nil,  // Not provided in real-time notifications
+            spamType: notification.spamType,
+            spamScore: notification.spamScore,
+            gameId: notification.gameId
         )
     }
 }
@@ -579,6 +582,11 @@ struct SpamChatGroupView: View {
                 if let totalMessages = chat.totalMessages {
                     InfoRow(label: "Total Spam", value: "\(totalMessages) messages")
                 }
+            }
+            
+            // Spam Detection Info (if available)
+            if chat.spamScore != nil || chat.spamType != nil {
+                SpamScoreView(spamType: chat.spamType, spamScore: chat.spamScore, gameId: chat.gameId)
             }
             
             // Message
@@ -732,6 +740,149 @@ struct InfoRow: View {
                 .foregroundColor(.primary)
                 .fontWeight(.medium)
         }
+    }
+}
+
+// MARK: - Spam Score View
+
+struct SpamScoreView: View {
+    let spamType: String?
+    let spamScore: Double?
+    let gameId: String?
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var scoreColor: Color {
+        guard let score = spamScore else { return .gray }
+        if score >= 0.9 { return .red }
+        if score >= 0.7 { return .orange }
+        if score >= 0.5 { return .yellow }
+        return .green
+    }
+    
+    private var scorePercentage: String {
+        guard let score = spamScore else { return "N/A" }
+        return String(format: "%.1f%%", score * 100)
+    }
+    
+    private var severityText: String {
+        guard let score = spamScore else { return "Unknown" }
+        if score >= 0.9 { return "Critical" }
+        if score >= 0.7 { return "High" }
+        if score >= 0.5 { return "Medium" }
+        return "Low"
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundColor(scoreColor)
+                    .font(.system(size: 14))
+                
+                Text("Spam Detection")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack(spacing: 16) {
+                // Spam Score with progress indicator
+                if let score = spamScore {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Score")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        
+                        HStack(spacing: 6) {
+                            // Circular progress indicator
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 3)
+                                    .frame(width: 28, height: 28)
+                                
+                                Circle()
+                                    .trim(from: 0, to: score)
+                                    .stroke(scoreColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                    .frame(width: 28, height: 28)
+                                    .rotationEffect(.degrees(-90))
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(scorePercentage)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(scoreColor)
+                                
+                                Text(severityText)
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(scoreColor.opacity(0.1))
+                    )
+                }
+                
+                // Spam Type badge
+                if let type = spamType, !type.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Type")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        
+                        Text(formatSpamType(type))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(Color.purple)
+                            )
+                    }
+                }
+                
+                // Game ID (if available)
+                if let game = gameId, !game.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Game")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        
+                        Text(game)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(colorScheme == .dark ? Color(white: 0.2) : Color(white: 0.9))
+                            )
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(scoreColor.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func formatSpamType(_ type: String) -> String {
+        // Convert snake_case to Title Case
+        return type
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 }
 
