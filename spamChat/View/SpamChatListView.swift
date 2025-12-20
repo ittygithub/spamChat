@@ -28,6 +28,8 @@ struct SpamChatListView: View {
     @StateObject private var webSocketService = WebSocketService.shared
     @State private var newlyAddedChatIds: Set<Int> = []
     @State private var animatingChatId: Int? = nil
+    @State private var showSuccessToast = false
+    @State private var toastMessage = ""
     
     // Pagination state
     @State private var currentOffset = 0
@@ -105,6 +107,9 @@ struct SpamChatListView: View {
                                         },
                                         onLockAccount: {
                                             sheetItem = SheetItem(chat: chat, type: .lockAccount)
+                                        },
+                                        onQuickBan: {
+                                            performQuickBan(for: chat)
                                         },
                                         isNew: newlyAddedChatIds.contains(chat.id)
                                     )
@@ -266,6 +271,32 @@ struct SpamChatListView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
+            .overlay(
+                // Success/Error Toast
+                Group {
+                    if showSuccessToast {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Text(toastMessage)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        Capsule()
+                                            .fill(toastMessage.contains("❌") ? Color.red : Color.green)
+                                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                                    )
+                            }
+                            .padding(.bottom, 100)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: showSuccessToast)
+                        }
+                    }
+                }
+            )
         }
     }
     
@@ -280,6 +311,91 @@ struct SpamChatListView: View {
                 updatedChat.accountStatus = newAccountStatus
             }
             spamChats[index] = updatedChat
+        }
+    }
+    
+    // Quick ban forever function
+    private func performQuickBan(for chat: SpamChatItem) {
+        // Extract numeric userId
+        let userIdNumber: Int
+        if let directInt = Int(chat.userId) {
+            userIdNumber = directInt
+        } else if chat.userId.contains("_") {
+            let components = chat.userId.components(separatedBy: "_")
+            guard let lastComponent = components.last, let extractedId = Int(lastComponent) else {
+                toastMessage = "Invalid user ID format"
+                showSuccessToast = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    showSuccessToast = false
+                }
+                return
+            }
+            userIdNumber = extractedId
+        } else {
+            toastMessage = "Invalid user ID format"
+            showSuccessToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                showSuccessToast = false
+            }
+            return
+        }
+        
+        let agencyId = "\(chat.agencyId)"
+        
+        Task {
+            do {
+                // Lock both chat and account to banned_forever
+                async let chatResult = APIService.shared.lockChat(
+                    userId: userIdNumber,
+                    agencyId: agencyId,
+                    status: .bannedForever
+                )
+                async let accountResult = APIService.shared.lockAccount(
+                    userId: userIdNumber,
+                    agencyId: agencyId,
+                    status: .bannedForever
+                )
+                
+                let _ = try await (chatResult, accountResult)
+                
+                await MainActor.run {
+                    // Update local state to reflect banned status
+                    updateChatStatusLocally(
+                        chatId: chat.id,
+                        newChatStatus: "BANNED_FOREVER",
+                        newAccountStatus: "BANNED_FOREVER"
+                    )
+                    
+                    // Show success toast
+                    toastMessage = "✅ User \(chat.userId) banned forever"
+                    showSuccessToast = true
+                    
+                    // Haptic feedback
+                    let impactFeedback = UINotificationFeedbackGenerator()
+                    impactFeedback.notificationOccurred(.success)
+                    
+                    print("✅ Quick ban forever successful for user \(chat.userId)")
+                }
+                
+                // Hide toast after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    showSuccessToast = false
+                }
+            } catch {
+                await MainActor.run {
+                    toastMessage = "❌ Failed: \(error.localizedDescription)"
+                    showSuccessToast = true
+                    
+                    let impactFeedback = UINotificationFeedbackGenerator()
+                    impactFeedback.notificationOccurred(.error)
+                    
+                    print("❌ Quick ban failed: \(error.localizedDescription)")
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    showSuccessToast = false
+                }
+            }
         }
     }
     
@@ -528,8 +644,10 @@ struct SpamChatGroupView: View {
     let chat: SpamChatItem
     let onLockChat: () -> Void
     let onLockAccount: () -> Void
+    let onQuickBan: () -> Void
     var isNew: Bool = false
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isMessageExpanded: Bool = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -574,14 +692,51 @@ struct SpamChatGroupView: View {
             
             Divider()
             
-            // User Info
-            VStack(alignment: .leading, spacing: 6) {
-                InfoRow(label: "User ID", value: chat.userId)
-                InfoRow(label: "Agency ID", value: "\(chat.agencyId)")
-                InfoRow(label: "Wallet", value: formatWallet(chat.wallet))
+            // User Info - Compact single line
+            HStack(spacing: 8) {
+                Text("ID:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(chat.userId)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                    .fontWeight(.medium)
+                
+                Text("•")
+                    .foregroundColor(.secondary)
+                
+                Text("Agency:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("\(chat.agencyId)")
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                    .fontWeight(.medium)
+                
+                Text("•")
+                    .foregroundColor(.secondary)
+                
+                Text("₫")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(formatWallet(chat.wallet))
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                    .fontWeight(.medium)
+                
                 if let totalMessages = chat.totalMessages {
-                    InfoRow(label: "Total Spam", value: "\(totalMessages) messages")
+                    Text("•")
+                        .foregroundColor(.secondary)
+                    Text("\(totalMessages)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .fontWeight(.bold)
+                    Text("spam")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+                
+                Spacer()
             }
             
             // Spam Detection Info (if available)
@@ -589,88 +744,132 @@ struct SpamChatGroupView: View {
                 SpamScoreView(spamType: chat.spamType, spamScore: chat.spamScore, gameId: chat.gameId)
             }
             
-            // Message
+            // Message with truncation
             VStack(alignment: .leading, spacing: 6) {
                 Text("Message:")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                Text(chat.message)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .padding(.leading, 8)
-                    .padding(.vertical, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.98))
-                    )
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(truncatedMessage)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                        .lineLimit(isMessageExpanded ? nil : 3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    if shouldShowExpandButton {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isMessageExpanded.toggle()
+                            }
+                        }) {
+                            Text(isMessageExpanded ? "Show Less" : "Show More")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                .padding(.leading, 8)
+                .padding(.vertical, 8)
+                .padding(.trailing, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.98))
+                )
             }
             .padding(.vertical, 4)
             
             // Action Buttons
-            HStack(spacing: 12) {
-                // Check chat_status for Lock/Unlock Chat button
-                if chat.chatStatus.uppercased().contains("BANNED") || chat.chatStatus.uppercased().contains("LOCKED") {
-                    Button(action: onLockChat) {
-                        HStack {
-                            Image(systemName: "lock.open.fill")
-                            Text("Unlock Chat")
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    // Check chat_status for Lock/Unlock Chat button
+                    if chat.chatStatus.uppercased().contains("BANNED") || chat.chatStatus.uppercased().contains("LOCKED") {
+                        Button(action: onLockChat) {
+                            HStack {
+                                Image(systemName: "lock.open.fill")
+                                Text("Unlock Chat")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.green)
+                            .cornerRadius(8)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.green)
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                } else {
-                    Button(action: onLockChat) {
-                        HStack {
-                            Image(systemName: "message.badge.fill")
-                            Text("Lock Chat")
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        Button(action: onLockChat) {
+                            HStack {
+                                Image(systemName: "message.badge.fill")
+                                Text("Lock Chat")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.orange)
+                            .cornerRadius(8)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.orange)
-                        .cornerRadius(8)
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Check account_status for Lock/Unlock Account button
+                    if chat.accountStatus.uppercased().contains("BANNED") || chat.accountStatus.uppercased().contains("LOCKED") {
+                        Button(action: onLockAccount) {
+                            HStack {
+                                Image(systemName: "person.crop.circle.badge.checkmark")
+                                Text("Unlock Account")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.green)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        Button(action: onLockAccount) {
+                            HStack {
+                                Image(systemName: "person.crop.circle.badge.xmark")
+                                Text("Lock Account")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.red)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
                 }
                 
-                // Check account_status for Lock/Unlock Account button
-                if chat.accountStatus.uppercased().contains("BANNED") || chat.accountStatus.uppercased().contains("LOCKED") {
-                    Button(action: onLockAccount) {
-                        HStack {
-                            Image(systemName: "person.crop.circle.badge.checkmark")
-                            Text("Unlock Account")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.green)
-                        .cornerRadius(8)
+                // Quick Ban Forever button
+                Button(action: {
+                    onQuickBan()
+                }) {
+                    HStack {
+                        Image(systemName: "hand.raised.fill")
+                        Text("Quick Ban Forever")
                     }
-                    .buttonStyle(PlainButtonStyle())
-                } else {
-                    Button(action: onLockAccount) {
-                        HStack {
-                            Image(systemName: "person.crop.circle.badge.xmark")
-                            Text("Lock Account")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.red)
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(8)
+                    .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
                 }
+                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding()
@@ -679,6 +878,18 @@ struct SpamChatGroupView: View {
                 .fill(colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.95))
         )
         
+    }
+    
+    // Computed property to check if message needs truncation
+    private var shouldShowExpandButton: Bool {
+        let lines = chat.message.components(separatedBy: .newlines)
+        // Show button if more than 3 lines or if any line is very long
+        return lines.count > 3 || chat.message.count > 150
+    }
+    
+    // Get truncated or full message
+    private var truncatedMessage: String {
+        return chat.message
     }
     
     private func formatDate(_ dateString: String) -> String {
