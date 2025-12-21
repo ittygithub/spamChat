@@ -751,10 +751,17 @@ struct SpamChatGroupView: View {
                     .foregroundColor(.secondary)
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(truncatedMessage)
+                    if shouldShowExpandButton && !isMessageExpanded {
+                        // Show ellipsis for truncated content
+                        Text("...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    
+                    Text(displayedMessage)
                         .font(.subheadline)
                         .foregroundColor(.primary)
-                        .lineLimit(isMessageExpanded ? nil : 3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
                     if shouldShowExpandButton {
@@ -780,96 +787,94 @@ struct SpamChatGroupView: View {
             }
             .padding(.vertical, 4)
             
-            // Action Buttons
-            VStack(spacing: 8) {
-                HStack(spacing: 12) {
+            // Action Buttons - Circular Icon Only (Centered)
+            HStack {
+                Spacer()
+                
+                HStack(spacing: 20) {
                     // Check chat_status for Lock/Unlock Chat button
                     if chat.chatStatus.uppercased().contains("BANNED") || chat.chatStatus.uppercased().contains("LOCKED") {
                         Button(action: onLockChat) {
-                            HStack {
-                                Image(systemName: "lock.open.fill")
-                                Text("Unlock Chat")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.green)
-                            .cornerRadius(8)
+                            Image(systemName: "lock.open.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(Color.green)
+                                )
+                                .shadow(color: Color.green.opacity(0.3), radius: 3, x: 0, y: 2)
                         }
                         .buttonStyle(PlainButtonStyle())
                     } else {
                         Button(action: onLockChat) {
-                            HStack {
-                                Image(systemName: "message.badge.fill")
-                                Text("Lock Chat")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.orange)
-                            .cornerRadius(8)
+                            Image(systemName: "message.badge.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(Color.orange)
+                                )
+                                .shadow(color: Color.orange.opacity(0.3), radius: 3, x: 0, y: 2)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
                     
-                    // Check account_status for Lock/Unlock Account button
+                    // Check account_status for Lock/Unlock Account button (CENTER)
                     if chat.accountStatus.uppercased().contains("BANNED") || chat.accountStatus.uppercased().contains("LOCKED") {
                         Button(action: onLockAccount) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.checkmark")
-                                Text("Unlock Account")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.green)
-                            .cornerRadius(8)
+                            Image(systemName: "person.crop.circle.badge.checkmark")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(Color.green)
+                                )
+                                .shadow(color: Color.green.opacity(0.3), radius: 3, x: 0, y: 2)
                         }
                         .buttonStyle(PlainButtonStyle())
                     } else {
                         Button(action: onLockAccount) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.xmark")
-                                Text("Lock Account")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.red)
-                            .cornerRadius(8)
+                            Image(systemName: "person.crop.circle.badge.xmark")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(Color.red)
+                                )
+                                .shadow(color: Color.red.opacity(0.3), radius: 3, x: 0, y: 2)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
+                    
+                    // Quick Ban Forever button
+                    Button(action: {
+                        onQuickBan()
+                    }) {
+                        Image(systemName: "hand.raised.fill")
+                            .font(.system(size: 18))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(width: 50, height: 50)
+                            .background(
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                            )
+                            .shadow(color: Color.red.opacity(0.4), radius: 4, x: 0, y: 2)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 
-                // Quick Ban Forever button
-                Button(action: {
-                    onQuickBan()
-                }) {
-                    HStack {
-                        Image(systemName: "hand.raised.fill")
-                        Text("Quick Ban Forever")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(8)
-                    .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
-                }
-                .buttonStyle(PlainButtonStyle())
+                Spacer()
             }
         }
         .padding()
@@ -887,9 +892,22 @@ struct SpamChatGroupView: View {
         return lines.count > 3 || chat.message.count > 150
     }
     
-    // Get truncated or full message
-    private var truncatedMessage: String {
-        return chat.message
+    // Get displayed message - show last lines when collapsed, full when expanded
+    private var displayedMessage: String {
+        if isMessageExpanded {
+            // Show full message when expanded
+            return chat.message
+        } else {
+            // Show last 3-4 lines when collapsed
+            let lines = chat.message.components(separatedBy: .newlines)
+            if lines.count <= 3 {
+                return chat.message
+            }
+            
+            // Take last 3 lines
+            let lastLines = lines.suffix(3)
+            return lastLines.joined(separator: "\n")
+        }
     }
     
     private func formatDate(_ dateString: String) -> String {
