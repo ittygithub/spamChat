@@ -621,7 +621,7 @@ struct SpamChatListView: View {
             chatStatus: notification.chatStatus,
             accountStatus: notification.accountStatus,
             createdAt: notification.createdAt,
-            updatedAt: notification.createdAt, // Use createdAt as updatedAt if not provided
+            updatedAt: notification.createdAt,
             agencyId: agencyIdValue,
             wallet: walletValue,
             projectName: notification.projectName,
@@ -630,7 +630,7 @@ struct SpamChatListView: View {
             platform: notification.platform,
             displayName: notification.username,
             timestamp: notification.createdAt,
-            totalMessages: nil,  // Not provided in real-time notifications
+            totalMessages: nil,
             spamType: notification.spamType,
             spamScore: notification.spamScore,
             gameId: notification.gameId
@@ -990,7 +990,7 @@ struct SpamScoreView: View {
     
     private var scorePercentage: String {
         guard let score = spamScore else { return "N/A" }
-        return String(format: "%.1f%%", score * 100)
+        return String(format: "%.0f%%", score * 100)
     }
     
     private var severityText: String {
@@ -1001,108 +1001,73 @@ struct SpamScoreView: View {
         return "Low"
     }
     
+    private var severityIcon: String {
+        guard let score = spamScore else { return "questionmark.circle" }
+        if score >= 0.9 { return "exclamationmark.triangle.fill" }
+        if score >= 0.7 { return "exclamationmark.circle.fill" }
+        if score >= 0.5 { return "info.circle.fill" }
+        return "checkmark.circle.fill"
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.shield.fill")
+        HStack(spacing: 12) {
+            // Severity icon with score
+            HStack(spacing: 6) {
+                Image(systemName: severityIcon)
+                    .font(.system(size: 16))
                     .foregroundColor(scoreColor)
-                    .font(.system(size: 14))
                 
-                Text("Spam Detection")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(scorePercentage)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(scoreColor)
+                    Text(severityText)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(scoreColor.opacity(0.12))
+            )
             
-            HStack(spacing: 16) {
-                // Spam Score with progress indicator
-                if let score = spamScore {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Score")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                        
-                        HStack(spacing: 6) {
-                            // Circular progress indicator
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 3)
-                                    .frame(width: 28, height: 28)
-                                
-                                Circle()
-                                    .trim(from: 0, to: score)
-                                    .stroke(scoreColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                                    .frame(width: 28, height: 28)
-                                    .rotationEffect(.degrees(-90))
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(scorePercentage)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(scoreColor)
-                                
-                                Text(severityText)
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
+            // Spam Type badge
+            if let type = spamType, !type.isEmpty {
+                Text(formatSpamType(type))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(scoreColor.opacity(0.1))
+                            .fill(Color.purple)
                     )
-                }
-                
-                // Spam Type badge
-                if let type = spamType, !type.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Type")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                        
-                        Text(formatSpamType(type))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.purple)
-                            )
-                    }
-                }
-                
-                // Game ID (if available)
-                if let game = gameId, !game.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Game")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                        
-                        Text(game)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(colorScheme == .dark ? Color(white: 0.2) : Color(white: 0.9))
-                            )
-                    }
-                }
-                
-                Spacer()
             }
+            
+            // Game ID badge
+            if let game = gameId, !game.isEmpty {
+                Text(game)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.primary.opacity(0.8))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(colorScheme == .dark ? Color(white: 0.18) : Color(white: 0.92))
+                    )
+            }
+            
+            Spacer()
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.96))
+            RoundedRectangle(cornerRadius: 10)
+                .fill(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.97))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(scoreColor.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(scoreColor.opacity(0.25), lineWidth: 1)
                 )
         )
     }

@@ -306,17 +306,11 @@ class WebSocketService: ObservableObject {
             
             switch message.type {
             case "spam_chat_new":
-                print("🔍 DEBUG: Processing spam_chat_new message...")
                 if case .spamChat(let notification) = message.data {
-                    print("🎯 New spam chat notification: User \(notification.username)")
-                    print("🔍 DEBUG: Notification ID: \(notification.id), AgencyID: \(notification.agencyId)")
-                    print("🔍 DEBUG: Calling onNewSpamChat callback...")
+                    print("🎯 New spam chat: \(notification.username) (ID: \(notification.id))")
                     DispatchQueue.main.async {
                         self.onNewSpamChat?(notification)
                     }
-                } else {
-                    print("⚠️ DEBUG: Failed to extract SpamChatNotification from message.data")
-                    print("🔍 DEBUG: message.data type: \(type(of: message.data))")
                 }
                 
             case "user_status_update":
