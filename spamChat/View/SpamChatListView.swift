@@ -888,25 +888,33 @@ struct SpamChatGroupView: View {
     // Computed property to check if message needs truncation
     private var shouldShowExpandButton: Bool {
         let lines = chat.message.components(separatedBy: .newlines)
-        // Show button if more than 3 lines or if any line is very long
+        // Show button if more than 3 lines or if message is very long
         return lines.count > 3 || chat.message.count > 150
     }
     
-    // Get displayed message - show last lines when collapsed, full when expanded
+    // Get displayed message - show truncated when collapsed, full when expanded
     private var displayedMessage: String {
         if isMessageExpanded {
             // Show full message when expanded
             return chat.message
         } else {
-            // Show last 3-4 lines when collapsed
             let lines = chat.message.components(separatedBy: .newlines)
-            if lines.count <= 3 {
-                return chat.message
+            
+            // If more than 3 lines, show last 3 lines
+            if lines.count > 3 {
+                let lastLines = lines.suffix(3)
+                return lastLines.joined(separator: "\n")
             }
             
-            // Take last 3 lines
-            let lastLines = lines.suffix(3)
-            return lastLines.joined(separator: "\n")
+            // If message is long (>150 chars) but few lines, truncate by characters
+            if chat.message.count > 150 {
+                // Show last ~150 characters
+                let startIndex = chat.message.index(chat.message.endIndex, offsetBy: -150, limitedBy: chat.message.startIndex) ?? chat.message.startIndex
+                return String(chat.message[startIndex...])
+            }
+            
+            // No truncation needed
+            return chat.message
         }
     }
     
@@ -914,6 +922,7 @@ struct SpamChatGroupView: View {
         // Try parsing with fractional seconds first
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        isoFormatter.timeZone = TimeZone(identifier: "UTC") // API returns UTC time
         
         var date = isoFormatter.date(from: dateString)
         
@@ -927,13 +936,15 @@ struct SpamChatGroupView: View {
         if date == nil {
             let fallbackFormatter = DateFormatter()
             fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+            fallbackFormatter.timeZone = TimeZone(identifier: "UTC")
             date = fallbackFormatter.date(from: dateString)
         }
         
         if let date = date {
             let formatter = DateFormatter()
             formatter.dateFormat = "dd/MM/yyyy HH:mm"
-            // Display in user's local timezone
+            // Display in user's device local timezone (auto-detects from device settings)
+            formatter.timeZone = TimeZone.current
             return formatter.string(from: date)
         }
         
