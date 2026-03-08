@@ -10,13 +10,18 @@ import UIKit
 import Firebase
 import UserNotifications
 import FirebaseMessaging
-
 @main
 struct spamChatApp: App {
-        @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var authService = AuthService.shared
+
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            if authService.isLoggedIn {
+                MainTabView()
+            } else {
+                LoginView()
+            }
         }
     }
 }
@@ -27,11 +32,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         NotificationCenter.default.removeObserver(self)
     }
     
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        return GoogleSignInHelper.shared.handleURL(url)
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         FirebaseApp.configure()
+
+        // Configure Google Sign-In
+        GoogleSignInHelper.shared.configure()
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
         

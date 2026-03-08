@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var webSocketService = WebSocketService.shared
+    @ObservedObject private var authService = AuthService.shared
     
     // Get version and build number from Bundle
     private var appVersion: String {
@@ -68,8 +69,30 @@ struct SettingView: View {
                 
                 
                 
+                if let user = authService.currentUser {
+                    Section(header: Text("ACCOUNT")) {
+                        SettingRow(label: "Name", value: user.name)
+                        SettingRow(label: "Email", value: user.email)
+                    }
+                }
+
                 Section(header: Text("ABOUT")) {
                     SettingRow(label: "Developer", value: "Spam Chat Team")
+                }
+
+                Section {
+                    Button(action: {
+                        GoogleSignInHelper.shared.signOut()
+                        authService.logout()
+                    }) {
+                        HStack {
+                            Spacer()
+                            Text("Logout")
+                                .foregroundColor(.red)
+                                .fontWeight(.medium)
+                            Spacer()
+                        }
+                    }
                 }
             }
             .listStyle(InsetGroupedListStyle())

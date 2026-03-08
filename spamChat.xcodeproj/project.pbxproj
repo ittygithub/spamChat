@@ -11,6 +11,8 @@
 		107E9F982ED700AB00FD650E /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 107E9F972ED700AB00FD650E /* FirebaseMessaging */; };
 		107E9F9A2ED7034000FD650E /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 107E9F992ED7034000FD650E /* FirebaseAnalytics */; };
 		108AFD552EC6EF85006D044C /* SwiftyRSA in Frameworks */ = {isa = PBXBuildFile; productRef = 108AFD542EC6EF85006D044C /* SwiftyRSA */; };
+		EF7D38BA2F5D6B7500AAA1DF /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = EF7D38B92F5D6B7500AAA1DF /* GoogleSignIn */; };
+		EF7D38BC2F5D6B7500AAA1DF /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = EF7D38BB2F5D6B7500AAA1DF /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -57,7 +59,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EF7D38BC2F5D6B7500AAA1DF /* GoogleSignInSwift in Frameworks */,
 				107E9F982ED700AB00FD650E /* FirebaseMessaging in Frameworks */,
+				EF7D38BA2F5D6B7500AAA1DF /* GoogleSignIn in Frameworks */,
 				108AFD552EC6EF85006D044C /* SwiftyRSA in Frameworks */,
 				107E9F9A2ED7034000FD650E /* FirebaseAnalytics in Frameworks */,
 			);
@@ -106,6 +110,8 @@
 				108AFD542EC6EF85006D044C /* SwiftyRSA */,
 				107E9F972ED700AB00FD650E /* FirebaseMessaging */,
 				107E9F992ED7034000FD650E /* FirebaseAnalytics */,
+				EF7D38B92F5D6B7500AAA1DF /* GoogleSignIn */,
+				EF7D38BB2F5D6B7500AAA1DF /* GoogleSignInSwift */,
 			);
 			productName = spamChat;
 			productReference = 108AFD312EC6E8A8006D044C /* spamChat.app */;
@@ -138,6 +144,7 @@
 			packageReferences = (
 				108AFD532EC6EF85006D044C /* XCRemoteSwiftPackageReference "SwiftyRSA" */,
 				107E9F962ED700AB00FD650E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				EF7D38B82F5D6B7500AAA1DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 108AFD322EC6E8A8006D044C /* Products */;
@@ -404,6 +411,14 @@
 				minimumVersion = 1.8.0;
 			};
 		};
+		EF7D38B82F5D6B7500AAA1DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -421,6 +436,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 108AFD532EC6EF85006D044C /* XCRemoteSwiftPackageReference "SwiftyRSA" */;
 			productName = SwiftyRSA;
+		};
+		EF7D38B92F5D6B7500AAA1DF /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EF7D38B82F5D6B7500AAA1DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		EF7D38BB2F5D6B7500AAA1DF /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EF7D38B82F5D6B7500AAA1DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

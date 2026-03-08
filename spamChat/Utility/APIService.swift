@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum APIError: Error {
+enum APIError: LocalizedError {
     case invalidURL
     case noData
     case decodingError
@@ -15,8 +15,8 @@ enum APIError: Error {
     case decryptionError
     case serverError(String)
     case networkError(Error)
-    
-    var localizedDescription: String {
+
+    var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid URL"
@@ -36,13 +36,43 @@ enum APIError: Error {
     }
 }
 
+struct LoginRequestBody: Codable {
+    let googleIdToken: String
+}
+
+struct EmptyBody: Codable {}
+
 class APIService {
     static let shared = APIService()
     private init() {}
-    
+
     private let baseURL = Env.shared.apiBackend
     private let apiKey = Env.shared.apiKeyNoHu
     
+    // MARK: - Auth Endpoints
+
+    func googleLogin(googleIDToken: String) async throws -> GoogleLoginResponse {
+        let endpoint = "\(baseURL)/auth/google-login"
+        let body = LoginRequestBody(googleIdToken: googleIDToken)
+        let response: GoogleLoginResponse = try await makeRequest(
+            endpoint: endpoint,
+            method: "POST",
+            body: body
+        )
+        return response
+    }
+
+    func verifyToken() async throws -> VerifyTokenResponse {
+        let endpoint = "\(baseURL)/auth/verify"
+        let body = EmptyBody()
+        let response: VerifyTokenResponse = try await makeRequest(
+            endpoint: endpoint,
+            method: "GET",
+            body: body
+        )
+        return response
+    }
+
     // MARK: - Get Spam Chat List
     
     func getSpamChatList(agencyId: Int? = nil, userId: String? = nil, limit: Int = 50, offset: Int = 0) async throws -> SpamChatListResponse {
@@ -221,28 +251,33 @@ class APIService {
             
             request = URLRequest(url: url)
             request.httpMethod = "GET"
-            
+
             print("📤 GET Request to: \(url.absoluteString)")
         } else {
             // For POST/PUT/DELETE, send parameters in body
             guard let url = URL(string: endpoint) else {
                 throw APIError.invalidURL
             }
-            
+
             request = URLRequest(url: url)
             request.httpMethod = method
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            
+
             // Convert to JSON data
             let finalJsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: [])
             request.httpBody = finalJsonData
-            
+
             print("📤 \(method) Request to: \(endpoint)")
             if let jsonString = String(data: finalJsonData, encoding: .utf8) {
                 print("📤 Request body: \(jsonString)")
             }
         }
-        
+
+        // Add JWT Authorization header if available
+        if let jwtToken = AuthService.shared.getToken() {
+            request.setValue("Bearer \(jwtToken)", forHTTPHeaderField: "Authorization")
+        }
+
         // Make request
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -252,10 +287,22 @@ class APIService {
         
         print("📥 Response status: \(httpResponse.statusCode)")
         
+        // Handle auth errors - auto logout
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            DispatchQueue.main.async { AuthService.shared.logout() }
+            throw APIError.serverError("Session expired. Please login again.")
+        }
+
         guard httpResponse.statusCode == 200 else {
+            // Try to read error message from response body
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorMsg = errorJson["error"] as? String {
+                print("❌ Server error: \(errorMsg)")
+                throw APIError.serverError(errorMsg)
+            }
             throw APIError.serverError("Server returned status code: \(httpResponse.statusCode)")
         }
-        
+
         // Decode encrypted response from backend
         let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
         
@@ -364,16 +411,21 @@ class APIService {
                 print("📤 Request body: \(jsonString)")
             }
         }
-        
+
+        // Add JWT Authorization header if available
+        if let jwtToken = AuthService.shared.getToken() {
+            request.setValue("Bearer \(jwtToken)", forHTTPHeaderField: "Authorization")
+        }
+
         // Make request
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.noData
         }
-        
+
         print("📥 Direct Response status: \(httpResponse.statusCode)")
-        
+
         // For local development, expect direct JSON response (not encrypted)
         if let jsonString = String(data: data, encoding: .utf8) {
             print("📥 Direct response: \(jsonString)")
