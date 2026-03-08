@@ -67,3 +67,4 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 spamChat/GoogleService-Info.plist
+spamChat/GoogleService-Info.plist
