@@ -88,7 +88,12 @@ class AuthService: ObservableObject {
 
         do {
             let response = try await APIService.shared.verifyToken()
-            if !response.success {
+            if response.success {
+                // Save refreshed token to extend session
+                if !response.token.isEmpty {
+                    saveToken(response.token)
+                }
+            } else {
                 // Token invalid or user locked
                 logout()
             }
@@ -138,11 +143,13 @@ struct GoogleLoginUser: Codable {
 
 struct VerifyTokenResponse: Codable {
     let success: Bool
+    let token: String
     let message: String
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         success = (try? container.decode(Bool.self, forKey: .success)) ?? false
+        token = (try? container.decode(String.self, forKey: .token)) ?? ""
         message = (try? container.decode(String.self, forKey: .message)) ?? ""
     }
 }

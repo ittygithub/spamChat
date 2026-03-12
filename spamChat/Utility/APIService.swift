@@ -289,8 +289,15 @@ class APIService {
         
         // Handle auth errors - auto logout
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            // Read actual error message from server
+            var errorMessage = "Session expired. Please login again."
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let serverMsg = errorJson["message"] as? String ?? errorJson["error"] as? String {
+                errorMessage = serverMsg
+                print("❌ Auth error (\(httpResponse.statusCode)): \(serverMsg)")
+            }
             DispatchQueue.main.async { AuthService.shared.logout() }
-            throw APIError.serverError("Session expired. Please login again.")
+            throw APIError.serverError(errorMessage)
         }
 
         guard httpResponse.statusCode == 200 else {

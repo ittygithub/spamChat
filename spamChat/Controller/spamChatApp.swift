@@ -19,6 +19,9 @@ struct spamChatApp: App {
         WindowGroup {
             if authService.isLoggedIn {
                 MainTabView()
+                    .task {
+                        await authService.verifyToken()
+                    }
             } else {
                 LoginView()
             }
