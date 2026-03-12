@@ -10,6 +10,7 @@ struct LoginView: View {
     @ObservedObject var authService = AuthService.shared
     @State private var errorMessage: String?
     @State private var isSigningIn = false
+    @State private var isSigningInOten = false
 
     var body: some View {
         VStack(spacing: 32) {
@@ -40,26 +41,28 @@ struct LoginView: View {
                     .padding(.horizontal)
             }
 
-            // Google Sign-In Button
-            Button(action: handleGoogleSignIn) {
-                HStack(spacing: 12) {
-                    if isSigningIn {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "g.circle.fill")
-                            .font(.title2)
+            VStack(spacing: 12) {
+                // Oten Sign-In Button
+                Button(action: handleOtenSignIn) {
+                    HStack(spacing: 12) {
+                        if isSigningInOten {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "person.badge.shield.checkmark.fill")
+                                .font(.title2)
+                        }
+                        Text(isSigningInOten ? "Signing in..." : "Sign in with Oten")
+                            .font(.headline)
                     }
-                    Text(isSigningIn ? "Signing in..." : "Sign in with Google")
-                        .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(12)
+                .disabled(isSigningInOten)
             }
-            .disabled(isSigningIn)
             .padding(.horizontal, 32)
 
             Spacer()
@@ -89,6 +92,29 @@ struct LoginView: View {
             } catch {
                 await MainActor.run {
                     isSigningIn = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func handleOtenSignIn() {
+        isSigningInOten = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let result = try await OtenAuthService.shared.signIn()
+                print("✅ Oten Sign-In success, sending code to backend...")
+
+                try await authService.loginWithOten(code: result.code, codeVerifier: result.codeVerifier)
+                await MainActor.run { isSigningInOten = false }
+            } catch OtenAuthError.cancelled {
+                // User cancelled - don't show error
+                await MainActor.run { isSigningInOten = false }
+            } catch {
+                await MainActor.run {
+                    isSigningInOten = false
                     errorMessage = error.localizedDescription
                 }
             }

@@ -81,6 +81,30 @@ class AuthService: ObservableObject {
         }
     }
 
+    // MARK: - Oten Login
+
+    func loginWithOten(code: String, codeVerifier: String) async throws {
+        DispatchQueue.main.async { self.isLoading = true }
+        defer { DispatchQueue.main.async { self.isLoading = false } }
+
+        let response = try await APIService.shared.otenLogin(code: code, codeVerifier: codeVerifier)
+
+        if response.success {
+            saveToken(response.token)
+            let user = AuthUser(
+                id: response.user.id,
+                email: response.user.email,
+                name: response.user.name,
+                avatarUrl: response.user.avatarUrl,
+                status: response.user.status,
+                expired: response.user.expired
+            )
+            saveUser(user)
+        } else {
+            throw APIError.serverError(response.message)
+        }
+    }
+
     // MARK: - Verify Token (check if still valid on app launch)
 
     func verifyToken() async {

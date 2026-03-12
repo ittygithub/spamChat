@@ -11,6 +11,7 @@ struct SettingView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var webSocketService = WebSocketService.shared
     @ObservedObject private var authService = AuthService.shared
+    @State private var showLogoutConfirmation = false
     
     // Get version and build number from Bundle
     private var appVersion: String {
@@ -82,8 +83,7 @@ struct SettingView: View {
 
                 Section {
                     Button(action: {
-                        GoogleSignInHelper.shared.signOut()
-                        authService.logout()
+                        showLogoutConfirmation = true
                     }) {
                         HStack {
                             Spacer()
@@ -98,6 +98,15 @@ struct SettingView: View {
             .listStyle(InsetGroupedListStyle())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .alert("Logout", isPresented: $showLogoutConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Logout", role: .destructive) {
+                    GoogleSignInHelper.shared.signOut()
+                    authService.logout()
+                }
+            } message: {
+                Text("Are you sure you want to logout?")
+            }
         }
     }
 }

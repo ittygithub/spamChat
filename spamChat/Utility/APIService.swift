@@ -40,6 +40,11 @@ struct LoginRequestBody: Codable {
     let googleIdToken: String
 }
 
+struct OtenLoginRequestBody: Codable {
+    let code: String
+    let codeVerifier: String
+}
+
 struct EmptyBody: Codable {}
 
 class APIService {
@@ -54,6 +59,17 @@ class APIService {
     func googleLogin(googleIDToken: String) async throws -> GoogleLoginResponse {
         let endpoint = "\(baseURL)/auth/google-login"
         let body = LoginRequestBody(googleIdToken: googleIDToken)
+        let response: GoogleLoginResponse = try await makeRequest(
+            endpoint: endpoint,
+            method: "POST",
+            body: body
+        )
+        return response
+    }
+
+    func otenLogin(code: String, codeVerifier: String) async throws -> GoogleLoginResponse {
+        let endpoint = "\(baseURL)/auth/oten-login"
+        let body = OtenLoginRequestBody(code: code, codeVerifier: codeVerifier)
         let response: GoogleLoginResponse = try await makeRequest(
             endpoint: endpoint,
             method: "POST",

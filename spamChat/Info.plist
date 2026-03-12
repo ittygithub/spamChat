@@ -19,6 +19,14 @@
 			<key>CFBundleURLName</key>
 			<string>Google Sign-In</string>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>spamchat</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>Oten OAuth</string>
+		</dict>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
