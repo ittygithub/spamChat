@@ -28,6 +28,8 @@
 			<string>Oten OAuth</string>
 		</dict>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Spam Chat uses Face ID to verify your identity for secure access.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

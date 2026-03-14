@@ -8,10 +8,12 @@
 import SwiftUI
 
 struct SettingView: View {
+    var isDuressMode: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var webSocketService = WebSocketService.shared
     @ObservedObject private var authService = AuthService.shared
     @State private var showLogoutConfirmation = false
+    @State private var showResetPasswordConfirmation = false
     
     // Get version and build number from Bundle
     private var appVersion: String {
@@ -72,13 +74,47 @@ struct SettingView: View {
                 
                 if let user = authService.currentUser {
                     Section(header: Text("ACCOUNT")) {
-                        SettingRow(label: "Name", value: user.name)
-                        SettingRow(label: "Email", value: user.email)
+                        HStack(spacing: 14) {
+                            // Avatar circle with first character of name
+                            ZStack {
+                                Circle()
+                                    .fill(Color.green.opacity(0.7))
+                                    .frame(width: 50, height: 50)
+                                Text(String(user.name.prefix(1)).lowercased())
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(user.name)
+                                    .font(.headline)
+                                Text(user.email)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
 
                 Section(header: Text("ABOUT")) {
                     SettingRow(label: "Developer", value: "Spam Chat Team")
+                }
+
+                if !isDuressMode {
+                    Section(header: Text("SECURITY")) {
+                        Button(action: {
+                            showResetPasswordConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "key.fill")
+                                    .foregroundColor(.orange)
+                                Text("Reset App Password")
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
                 }
 
                 Section {
@@ -106,6 +142,17 @@ struct SettingView: View {
                 }
             } message: {
                 Text("Are you sure you want to logout?")
+            }
+            .alert("Reset App Password", isPresented: $showResetPasswordConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Reset", role: .destructive) {
+                    AppPasswordManager.shared.clearPasswords()
+                    // Force re-login to go through security setup again
+                    GoogleSignInHelper.shared.signOut()
+                    authService.logout()
+                }
+            } message: {
+                Text("This will clear your application password and duress password. You will need to log in again and set up new passwords.")
             }
         }
     }

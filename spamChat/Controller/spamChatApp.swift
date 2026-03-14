@@ -18,10 +18,12 @@ struct spamChatApp: App {
     var body: some Scene {
         WindowGroup {
             if authService.isLoggedIn {
-                MainTabView()
-                    .task {
-                        await authService.verifyToken()
-                    }
+                if Env.shared.isSecurityEnabled {
+                    SecurityGateView()
+                } else {
+                    MainTabView()
+                        .task { await authService.verifyToken() }
+                }
             } else {
                 LoginView()
             }

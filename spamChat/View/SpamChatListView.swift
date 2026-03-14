@@ -21,6 +21,7 @@ struct SheetItem: Identifiable {
 }
 
 struct SpamChatListView: View {
+    var isDuressMode: Bool = false
     @State private var spamChats: [SpamChatItem] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -136,7 +137,7 @@ struct SpamChatListView: View {
                                         
                                         // Load more older messages when scrolling UP and reaching the top
                                         // Only load if we've completed the initial load (prevent auto-loading on first render)
-                                        if hasInitiallyLoaded && index < 5 && !isLoadingMore && hasMoreData {
+                                        if !isDuressMode && hasInitiallyLoaded && index < 5 && !isLoadingMore && hasMoreData {
                                             loadMoreChats()
                                         }
                                     }
@@ -145,6 +146,7 @@ struct SpamChatListView: View {
                             .listStyle(PlainListStyle())
                             .animation(.spring(response: 0.5, dampingFraction: 0.8), value: spamChats.count)
                             .refreshable {
+                                guard !isDuressMode else { return }
                                 await refreshData()
                             }
                             .onChange(of: shouldScrollToBottom) {
@@ -213,30 +215,41 @@ struct SpamChatListView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: fetchSpamChats) {
-                        Image(systemName: "arrow.clockwise")
+                    if !isDuressMode {
+                        Button(action: fetchSpamChats) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(isLoading)
                     }
-                    .disabled(isLoading)
                 }
             }
             .onAppear {
-                if spamChats.isEmpty {
-                    fetchSpamChats()
-                } else {
-                    // Scroll to bottom when view appears if we have data
+                if isDuressMode {
+                    spamChats = SpamChatListView.generateFakeChats()
+                    isLoading = false
+                    hasInitiallyLoaded = true
+                    hasMoreData = false
                     shouldScrollToBottom = true
-                }
-                // Only setup WebSocket if not already connected
-                if !webSocketService.isConnected {
-                    setupWebSocket()
+                } else {
+                    if spamChats.isEmpty {
+                        fetchSpamChats()
+                    } else {
+                        // Scroll to bottom when view appears if we have data
+                        shouldScrollToBottom = true
+                    }
+                    // Only setup WebSocket if not already connected
+                    if !webSocketService.isConnected {
+                        setupWebSocket()
+                    }
                 }
                 // Record initial load time
                 lastRefreshTime = Date()
             }
             .onReceive(autoRefreshTimer) { _ in
+                guard !isDuressMode else { return }
                 // Auto-refresh every 5 minutes
                 lastRefreshTime = Date()
-                
+
                 // Perform silent refresh without showing loading indicator
                 Task {
                     await refreshData()
@@ -247,9 +260,9 @@ struct SpamChatListView: View {
                     if item.type == .lockChat {
                         LockChatOptionsSheet(
                             chat: item.chat,
+                            isDuressMode: isDuressMode,
                             onDismiss: { newStatus in
                                 sheetItem = nil
-                                // Update only this chat's status locally
                                 if let newStatus = newStatus {
                                     updateChatStatusLocally(chatId: item.chat.id, newChatStatus: newStatus)
                                 }
@@ -258,9 +271,9 @@ struct SpamChatListView: View {
                     } else {
                         LockAccountOptionsSheet(
                             chat: item.chat,
+                            isDuressMode: isDuressMode,
                             onDismiss: { newStatus in
                                 sheetItem = nil
-                                // Update only this chat's status locally
                                 if let newStatus = newStatus {
                                     updateChatStatusLocally(chatId: item.chat.id, newAccountStatus: newStatus)
                                 }
@@ -316,6 +329,15 @@ struct SpamChatListView: View {
     
     // Quick ban forever function
     private func performQuickBan(for chat: SpamChatItem) {
+        // In duress mode, fake the success
+        if isDuressMode {
+            updateChatStatusLocally(chatId: chat.id, newChatStatus: "BANNED_FOREVER", newAccountStatus: "BANNED_FOREVER")
+            toastMessage = "User \(chat.userId) banned forever"
+            showSuccessToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { showSuccessToast = false }
+            return
+        }
+
         // Extract numeric userId
         let userIdNumber: Int
         if let directInt = Int(chat.userId) {
@@ -635,6 +657,55 @@ struct SpamChatListView: View {
             spamScore: notification.spamScore,
             gameId: notification.gameId
         )
+    }
+
+    // MARK: - Duress Mode Fake Data
+
+    static func generateFakeChats() -> [SpamChatItem] {
+        let entries: [(userId: String, username: String, message: String, project: String, chatStatus: String, accountStatus: String, hoursAgo: Double, wallet: Double, totalMessages: Int, spamType: String, spamScore: Double, gameId: String)] = [
+            ("310284", "deal_queen_99", "BUY 1 FREE 3!!! branded bags 90% off dm me fast before sold out bit.ly/luxbag", "shopee_sg", "BANNED_1DAY", "ACTIVE", 1, 45.90, 12, "counterfeit", 0.96, "live_chat"),
+            ("582017", "fastseller_kl", "iphone 16 pro max only $150 original sealed box whatsapp +601xxxxxxx", "lazada_my", "ACTIVE", "ACTIVE", 4, 0.00, 5, "scam", 0.91, "product_review"),
+            ("194738", "dropship_mama", "join my telegram group for wholesale price supplier list free t.me/dropship888", "shopee_th", "BANNED_3DAY", "ACTIVE", 9, 230.50, 28, "promotional", 0.88, "seller_chat"),
+            ("826501", "review_king22", "i give you 5 star review for $2 each dm me bulk discount available", "tokopedia_id", "ACTIVE", "ACTIVE", 16, 120.00, 7, "fake_review", 0.83, "buyer_chat"),
+            ("445903", "cheap_nike_ph", "NIKE AIR JORDAN ORIGINAL 100% only 500 peso free shipping COD", "shopee_ph", "ACTIVE", "ACTIVE", 24, 890.00, 3, "counterfeit", 0.79, "product_listing"),
+            ("773216", "crypto_pay_vn", "pay with USDT get extra 20% discount. safe transaction. dm for wallet address", "tiki_vn", "BANNED_7DAY", "BANNED_30DAY", 48, 3200.00, 45, "fraud", 0.97, "payment_chat"),
+            ("108654", "refund_trick01", "tutorial how to get free refund from any store. 100% working method 2026", "lazada_sg", "BANNED_FOREVER", "BANNED_FOREVER", 72, 0.00, 89, "exploit", 0.99, "support_chat"),
+            ("661429", "slot_promo_88", "play online slots while shopping! deposit 50 win 5000 click here >>>", "shopee_my", "BANNED_30DAY", "ACTIVE", 96, 15.00, 31, "gambling_spam", 0.94, "live_stream"),
+            ("239871", "weight_loss_sg", "lose 10kg in 1 week!! magic tea from korea. order now limited stock DM ME", "lazada_th", "ACTIVE", "ACTIVE", 120, 67.80, 4, "health_scam", 0.85, "product_qa"),
+            ("507142", "agent_resell", "i am authorized reseller for all brands. cheapest price guaranteed. wa +6598xxxx", "shopee_sg", "BANNED_1DAY", "ACTIVE", 168, 1580.00, 19, "unauthorized_seller", 0.90, "seller_chat"),
+        ]
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let now = Date()
+
+        return entries.enumerated().map { index, e in
+            let date = now.addingTimeInterval(-e.hoursAgo * 3600)
+            let dateStr = formatter.string(from: date)
+            return SpamChatItem(
+                id: 500000 + index,
+                userId: e.userId,
+                username: e.username,
+                message: e.message,
+                status: "pending",
+                chatStatus: e.chatStatus,
+                accountStatus: e.accountStatus,
+                createdAt: dateStr,
+                updatedAt: dateStr,
+                agencyId: 1,
+                wallet: e.wallet,
+                projectName: e.project,
+                processedAt: nil,
+                channel: "general",
+                platform: "kafka_stream",
+                displayName: nil,
+                timestamp: nil,
+                totalMessages: e.totalMessages,
+                spamType: e.spamType,
+                spamScore: e.spamScore,
+                gameId: e.gameId
+            )
+        }
     }
 }
 
@@ -1095,26 +1166,27 @@ struct SpamScoreView: View {
 
 struct LockChatOptionsSheet: View {
     let chat: SpamChatItem
-    let onDismiss: (String?) -> Void  // Now accepts optional status string
-    
+    let isDuressMode: Bool
+    let onDismiss: (String?) -> Void
+
     @State private var selectedStatus: LockChatStatus = .bannedForever
     @State private var isSubmitting = false
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = "Success"
     @State private var isError = false
-    
-    // Check if this is an unlock action (current chat status is banned)
+
     private var isUnlockAction: Bool {
         chat.chatStatus.uppercased().contains("BANNED") || chat.chatStatus.uppercased().contains("LOCKED")
     }
-    
+
     private var availableStatuses: [LockChatStatus] {
         isUnlockAction ? LockChatStatus.allCases : LockChatStatus.allCases.filter { $0 != .active }
     }
-    
-    init(chat: SpamChatItem, onDismiss: @escaping (String?) -> Void) {
+
+    init(chat: SpamChatItem, isDuressMode: Bool = false, onDismiss: @escaping (String?) -> Void) {
         self.chat = chat
+        self.isDuressMode = isDuressMode
         self.onDismiss = onDismiss
         // Pre-select current status if it's a banned status, otherwise default to bannedForever
         if let currentStatus = LockChatStatus(rawValue: chat.chatStatus), 
@@ -1324,13 +1396,22 @@ struct LockChatOptionsSheet: View {
     }
     
     private func submitLockChat() {
-        // Extract numeric userId from string (e.g., "test_user_203" → 203)
+        if isDuressMode {
+            isSubmitting = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                isSubmitting = false
+                isError = false
+                alertTitle = "Success"
+                alertMessage = "Chat status updated to \(selectedStatus.displayName)"
+                showAlert = true
+            }
+            return
+        }
+
         let userIdNumber: Int
         if let directInt = Int(chat.userId) {
-            // If userId is already a number string like "203"
             userIdNumber = directInt
         } else if chat.userId.contains("_") {
-            // Extract number from format like "test_user_203"
             let components = chat.userId.components(separatedBy: "_")
             guard let lastComponent = components.last, let extractedId = Int(lastComponent) else {
                 isError = true
@@ -1347,10 +1428,10 @@ struct LockChatOptionsSheet: View {
             showAlert = true
             return
         }
-        
+
         let agencyId = "\(chat.agencyId)"
         isSubmitting = true
-        
+
         Task {
             do {
                 let _ = try await APIService.shared.lockChat(
@@ -1358,7 +1439,7 @@ struct LockChatOptionsSheet: View {
                     agencyId: agencyId,
                     status: selectedStatus
                 )
-                
+
                 await MainActor.run {
                     isSubmitting = false
                     isError = false
@@ -1391,16 +1472,16 @@ struct LockChatOptionsSheet: View {
 
 struct LockAccountOptionsSheet: View {
     let chat: SpamChatItem
-    let onDismiss: (String?) -> Void  // Now accepts optional status string
-    
+    let isDuressMode: Bool
+    let onDismiss: (String?) -> Void
+
     @State private var selectedStatus: AccountStatus = .bannedForever
     @State private var isSubmitting = false
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = "Success"
     @State private var isError = false
-    
-    // Check if this is an unlock action (current account status is banned)
+
     private var isUnlockAction: Bool {
         chat.accountStatus.uppercased().contains("BANNED") || chat.accountStatus.uppercased().contains("LOCKED")
     }
@@ -1409,11 +1490,11 @@ struct LockAccountOptionsSheet: View {
         isUnlockAction ? AccountStatus.allCases : AccountStatus.allCases.filter { $0 != .active }
     }
     
-    init(chat: SpamChatItem, onDismiss: @escaping (String?) -> Void) {
+    init(chat: SpamChatItem, isDuressMode: Bool = false, onDismiss: @escaping (String?) -> Void) {
         self.chat = chat
+        self.isDuressMode = isDuressMode
         self.onDismiss = onDismiss
-        // Pre-select current status if it's a banned status, otherwise default to bannedForever
-        if let currentStatus = AccountStatus(rawValue: chat.accountStatus), 
+        if let currentStatus = AccountStatus(rawValue: chat.accountStatus),
            currentStatus != .active {
             _selectedStatus = State(initialValue: currentStatus)
         } else {
@@ -1620,13 +1701,22 @@ struct LockAccountOptionsSheet: View {
     }
     
     private func submitLockAccount() {
-        // Extract numeric userId from string (e.g., "test_user_203" → 203)
+        if isDuressMode {
+            isSubmitting = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                isSubmitting = false
+                isError = false
+                alertTitle = "Success"
+                alertMessage = "Account status updated to \(selectedStatus.displayName)"
+                showAlert = true
+            }
+            return
+        }
+
         let userIdNumber: Int
         if let directInt = Int(chat.userId) {
-            // If userId is already a number string like "203"
             userIdNumber = directInt
         } else if chat.userId.contains("_") {
-            // Extract number from format like "test_user_203"
             let components = chat.userId.components(separatedBy: "_")
             guard let lastComponent = components.last, let extractedId = Int(lastComponent) else {
                 isError = true
@@ -1643,10 +1733,10 @@ struct LockAccountOptionsSheet: View {
             showAlert = true
             return
         }
-        
+
         let agencyId = "\(chat.agencyId)"
         isSubmitting = true
-        
+
         Task {
             do {
                 let _ = try await APIService.shared.lockAccount(
@@ -1654,7 +1744,7 @@ struct LockAccountOptionsSheet: View {
                     agencyId: agencyId,
                     status: selectedStatus
                 )
-                
+
                 await MainActor.run {
                     isSubmitting = false
                     isError = false

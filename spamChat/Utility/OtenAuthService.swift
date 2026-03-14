@@ -111,6 +111,7 @@ class OtenAuthService: NSObject, ASWebAuthenticationPresentationContextProviding
             }
 
             session.presentationContextProvider = self
+            //session.allowsprefersEphemeralWebBrowserSessionPrompting = true
             session.prefersEphemeralWebBrowserSession = false
 
             DispatchQueue.main.async {
