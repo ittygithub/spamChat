@@ -39,8 +39,9 @@ struct SecurityGateView: View {
                     switch result {
                     case .appPassword:
                         isDuressMode = false
-                        // Only schedule if no existing recheck (don't reset on every login)
-                        if AppPasswordManager.shared.nextRecheckDate == nil {
+                        // Only schedule if no recheck exists yet (first login after registration)
+                        // If recheck is overdue, do NOT reset — MainTabView will force recheck modal
+                        if AppPasswordManager.shared.nextRecheckDate == nil && !AppPasswordManager.shared.isRecheckDue {
                             AppPasswordManager.shared.scheduleNextRecheck()
                         }
                         step = .verified
