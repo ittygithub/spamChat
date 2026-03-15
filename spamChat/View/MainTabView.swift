@@ -253,17 +253,14 @@ struct CustomTabView: View {
         guard manager.nextRecheckDate != nil else { return }
 
         if manager.isRecheckDue {
-            // Deadline passed — force recheck
+            // Deadline passed — force recheck immediately (no countdown)
             showRecheckWarning = false
             showRecheckSheet = false
-            if !showRecheckOverdue && !showRecheckCountdown {
-                if recheckHasShownCountdown {
-                    // Already shown countdown before (e.g. re-entering app) — go straight to fullscreen
-                    showRecheckOverdue = true
-                } else {
-                    // First time detecting overdue — show countdown
-                    startRecheckCountdown()
-                }
+            showRecheckCountdown = false
+            recheckCountdownTimer?.invalidate()
+            recheckCountdownTimer = nil
+            if !showRecheckOverdue {
+                showRecheckOverdue = true
             }
         } else if manager.isRecheckWarning {
             // Within warning window — show banner, user can tap to open sheet

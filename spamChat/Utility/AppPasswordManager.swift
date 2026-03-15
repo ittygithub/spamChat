@@ -119,18 +119,18 @@ class AppPasswordManager {
 
     private let earlyReminderDismissedKey = "pwd_early_reminder_dismissed"
 
-    /// Fixed recheck interval: 10 days, or override from Env for testing
+    /// Recheck deadline interval: from Env days config, or override seconds for testing
     private var recheckInterval: TimeInterval {
         let override = Env.shared.recheckIntervalOverride
         if override > 0 { return override }
-        return 10.0 * 86400 // 10 days
+        return Env.shared.recheckDeadlineDays * 86400
     }
 
-    /// Early reminder shows after 4 days (or 40% of override interval for testing)
+    /// Early reminder threshold: from Env days config, or 40% of override for testing
     private var earlyReminderThreshold: TimeInterval {
         let override = Env.shared.recheckIntervalOverride
         if override > 0 { return override * 0.4 }
-        return 4.0 * 86400 // 4 days
+        return Env.shared.recheckEarlyReminderDays * 86400
     }
 
     var lastVerifiedDate: Date? {
